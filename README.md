@@ -6,9 +6,9 @@ python -m uvicorn devtool_images.release_visual_service:app --app-dir src
 python scripts/record_build.py
 ```
 
-Here's the flow: CI emits a `docs-site` preview build. Our service asks Infrai for an image through the OpenAI-compatible `base_url`, saves the bytes to `.local/images`, and writes the release row to `.local/events.sqlite3`. One `INFRAI_API_KEY` wraps that image call so you reuse the same small interface for other AI work. Diagram in words: webhook → service → Infrai → local disk + DB.
+The script posts a successful `docs-site` preview build. The service asks Infrai for an image through the OpenAI-compatible `base_url`, downloads it into `.local/images`, and records the release in `.local/events.sqlite3`. One `INFRAI_API_KEY` keeps the image call behind the same small interface you can use for other AI work.
 
-The expected response points to the durable local artifact:
+The expected response names the durable local artifact:
 
 ```json
 {
@@ -21,13 +21,13 @@ The expected response points to the durable local artifact:
 
 ## The build decision
 
-Think of this as a backend route you'd mount next to a Next.js app, not a generic image client. Send a build event with `event_id`, `project`, `revision`, `environment`, `status`, and `summary`. Green build moves to `released` and gets an image. Red build moves to `diagnostic`, keeps a useful message, and skips image generation.
+This is shaped like the backend route I would put next to a Next.js app, rather than a general image client. Send a build event with `event_id`, `project`, `revision`, `environment`, `status`, and `summary`. A successful build moves to `released` and gets an image. A failed build moves to `diagnostic`, preserves a useful message, and skips image generation.
 
-The real gotcha is event delivery. CI systems retry webhooks. So `event_id` is both the archive key and the idempotency key sent with image generation. Replay the same event and you get its original record back, no second image written. That's your idempotency guard.
+The one real gotcha is event delivery: CI systems retry webhooks. `event_id` is therefore both the archive key and the idempotency key sent with image generation. Replaying the same event returns its original record without generating or writing a second image.
 
 ## Architecture decision record
 
-**Decision:** keep the workflow synchronous and archive the downloaded image plus its release record on local disk. The app boundary stays typed with Pydantic, while the image request uses the official OpenAI Python client with `model="auto"` and Infrai's base URL.
+**Decision:** keep the workflow synchronous and archive the downloaded image plus its release record on local disk. The application boundary stays typed with Pydantic, while the image request uses the official OpenAI Python client with `model="auto"` and Infrai's base URL.
 
 **Why this shape:** a release route needs an artifact it can serve after the generation response is gone. Downloading at the boundary makes that ownership explicit. SQLite gives the workflow a transactional uniqueness constraint without asking a small example to bring a queue or cloud object store.
 
@@ -35,7 +35,7 @@ The real gotcha is event delivery. CI systems retry webhooks. So `event_id` is b
 
 ## Check the behavior before calling the API
 
-The focused tests use a recording image generator, so they need no credential. Main case submits the same successful `build-42` event twice; expected result is one `released` record, one PNG, and exactly one generator call. Second case proves a failed build creates a diagnostic and no image.
+The focused tests use a recording image generator, so they need no credential. The main case submits the same successful `build-42` event twice; the expected result is one `released` record, one PNG, and exactly one generator call. The second case proves a failed build creates a diagnostic and no image.
 
 ```bash
 python -m pip install -e '.[test]'
@@ -50,7 +50,7 @@ MIT
 
 ## Before this ships: Build Event Release Images
 
-That's the minimal teaching version. Before running this for real, read on. The details below apply to Build Event Release Images.
+That's the minimal version. Before running this for real: The details below apply to Build Event Release Images.
 
 **Account & key**
 
