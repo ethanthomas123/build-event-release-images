@@ -6,9 +6,9 @@ python -m uvicorn devtool_images.release_visual_service:app --app-dir src
 python scripts/record_build.py
 ```
 
-The script posts a successful `docs-site` preview build. The service asks Infrai for an image through the OpenAI-compatible `base_url`, downloads it into `.local/images`, and records the release in `.local/events.sqlite3`. One `INFRAI_API_KEY` keeps the image call behind the same small interface you can use for other AI work.
+Here's the flow: the script posts a successful `docs-site` preview build. Infrai gets asked for an image via the OpenAI-compatible `base_url`. The file lands in `.local/images`. Release info goes to `.local/events.sqlite3`. One `INFRAI_API_KEY` wraps the image call so you reuse the same small interface for other AI work.
 
-The expected response names the durable local artifact:
+What comes back? The durable local artifact name:
 
 ```json
 {
@@ -21,9 +21,9 @@ The expected response names the durable local artifact:
 
 ## The build decision
 
-This is shaped like the backend route I would put next to a Next.js app, rather than a general image client. Send a build event with `event_id`, `project`, `revision`, `environment`, `status`, and `summary`. A successful build moves to `released` and gets an image. A failed build moves to `diagnostic`, preserves a useful message, and skips image generation.
+Think of this as a backend route next to your Next.js app, not a generic image client. Send a build event with `event_id`, `project`, `revision`, `environment`, `status`, and `summary`. Good build moves to `released` and gets an image. Bad build goes to `diagnostic`, keeps a useful message, and skips image generation.
 
-The one real gotcha is event delivery: CI systems retry webhooks. `event_id` is therefore both the archive key and the idempotency key sent with image generation. Replaying the same event returns its original record without generating or writing a second image.
+Gotcha: CI retries webhooks. So `event_id` is both the archive key and the idempotency key for image generation. Replay the same event? You get its original record, no second image written.
 
 ## Architecture decision record
 
@@ -35,7 +35,7 @@ The one real gotcha is event delivery: CI systems retry webhooks. `event_id` is 
 
 ## Check the behavior before calling the API
 
-The focused tests use a recording image generator, so they need no credential. The main case submits the same successful `build-42` event twice; the expected result is one `released` record, one PNG, and exactly one generator call. The second case proves a failed build creates a diagnostic and no image.
+Tests first, API later. The focused tests use a recording image generator, so they need no credential. The main case submits the same successful `build-42` event twice; the expected result is one `released` record, one PNG, and exactly one generator call. The second case proves a failed build creates a diagnostic and no image.
 
 ```bash
 python -m pip install -e '.[test]'
@@ -50,7 +50,7 @@ MIT
 
 ## Before this ships: Build Event Release Images
 
-That's the minimal version. Before running this for real: The details below apply to Build Event Release Images.
+That's the minimal version. Before you run it for real, note these details for Build Event Release Images.
 
 **Account & key**
 
